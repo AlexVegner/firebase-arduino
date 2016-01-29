@@ -111,6 +111,7 @@ class FirebasePush : public FirebaseCall {
   const String& name() const {
     return name_;
   }
+<<<<<<< HEAD
 
  private:
   String name_;
@@ -131,6 +132,17 @@ class FirebaseStream : public FirebaseCall {
 		 const String& path, HTTPClient* http = NULL);
   
   // True if there is an event available.
+=======
+  String get(const String& path);
+  // write a new JSON `value` to the given `path`.
+  // Note: A String `value` must include double quotes to be valid json.
+  String set(const String& path, const String& value);
+  // append a new JSON `value` to the given `path`.
+  // Note: A String `value` must include double quotes to be valid json.
+  String push(const String& path, const String& value);
+  void remove(const String& path);
+  bool connected();
+  Firebase& stream(const String& path);
   bool available();
 
   // event type.
