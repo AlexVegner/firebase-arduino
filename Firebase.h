@@ -46,8 +46,6 @@ class Firebase {
   FirebaseRemove remove(const String& path);
 
   // Starts a stream of events that affect object at "path".
-  // TODO: fix FirebaseStream lifecycle
-  //       https://github.com/esp8266/Arduino/issues/500
   FirebaseStream stream(const String& path);
 
  private:
@@ -111,6 +109,7 @@ class FirebasePush : public FirebaseCall {
   const String& name() const {
     return name_;
   }
+<<<<<<< HEAD
 
  private:
   String name_;
@@ -129,8 +128,7 @@ class FirebaseStream : public FirebaseCall {
   FirebaseStream() {}
   FirebaseStream(const String& host, const String& auth,
 		 const String& path, HTTPClient* http = NULL);
-  
-  // True if there is an event available.
+
   bool available();
 
   // event type.
