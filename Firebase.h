@@ -17,13 +17,13 @@
 // firebase-arduino is an Arduino client for Firebase.
 // It is currently limited to the ESP8266 board family.
 
-#ifndef firebase_h
-#define firebase_h
+#ifndef FIREBASE_H_
+#define FIREBASE_H_
 
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
-#include <ESP8266HTTPClient.h>
+//#include <Arduino.h>
+//#include <ESP8266WiFi.h>
+//#include <WiFiClientSecure.h>
+//#include <ESP8266HTTPClient.h>
 
 class FirebaseGet;
 class FirebaseSet;
@@ -34,12 +34,12 @@ class FirebaseStream;
 // Firebase REST API client.
 class Firebase {
  public:
-  Firebase(const String& host);
-  Firebase& auth(const String& auth);
+  Firebase(const char* host, const char* auth);
+  //Firebase& auth();
 
   // Fetch json encoded `value` at `path`.
-  FirebaseGet get(const String& path);
-
+  FirebaseGet get(const char* path);
+  /*
   // Set json encoded `value` at `path`.
   FirebaseSet set(const String& path, const String& json);
 
@@ -51,59 +51,68 @@ class Firebase {
 
   // Start a stream of events that affect value at `path`.
   FirebaseStream stream(const String& path);
-
+  */
  private:
-  HTTPClient http_;
-  String host_;
-  String auth_;
+  //HTTPClient http_;
+  const char* host_;
+  const char* auth_;
 };
 
+/*
 class FirebaseError {
  public:
   FirebaseError() {}
   FirebaseError(int code, const String& message) : code_(code), message_(message) {
-  }  
+  }
   operator bool() const { return code_ != 0; }
   int code() const { return code_; }
   const String& message() const { return message_; }
- private:  
+ private:
   int code_ = 0;
   String message_ = "";
-};
+};*/
 
+/*
 class FirebaseCall {
  public:
   FirebaseCall() {}
-  FirebaseCall(const String& host, const String& auth,
-               const char* method, const String& path,
-               const String& data = "",        
-               HTTPClient* http = NULL);
+  FirebaseCall(const char* host, const char* auth,
+               const char* method, const char* path,
+               const char* data = NULL);
   const FirebaseError& error() const {
     return error_;
   }
   const String& response() {
     return response_;
   }
- protected:
-  HTTPClient* http_;
-  FirebaseError error_;
-  String response_;
-};
-
-class FirebaseGet : public FirebaseCall {
+//protected:
+  //HTTPClient* http_;
+  //FirebaseError error_;
+  //String response_;
+//};
+*/
+#include <string>
+class FirebaseGet/* : public FirebaseCall*/ {
  public:
   FirebaseGet() {}
-  FirebaseGet(const String& host, const String& auth,
-              const String& path, HTTPClient* http = NULL);
-  
+  FirebaseGet(const char* host, const char* auth,
+              const char* path);
+  const char *URL() const {
+    return url_.c_str();
+  }
+ private:
+  std::string url_;
+  /*
   const String& json() const {
     return json_;
   }
 
  private:
   String json_;
+  */
 };
 
+/*
 class FirebaseSet: public FirebaseCall {
  public:
   FirebaseSet() {}
@@ -145,7 +154,7 @@ class FirebaseStream : public FirebaseCall {
   FirebaseStream() {}
   FirebaseStream(const String& host, const String& auth,
                  const String& path, HTTPClient* http = NULL);
-  
+
   // Return if there is any event available to read.
   bool available();
 
@@ -157,14 +166,14 @@ class FirebaseStream : public FirebaseCall {
   };
 
   // Read next json encoded `event` from stream.
-  Event read(String& event);  
+  Event read(String& event);
 
   const FirebaseError& error() const {
     return _error;
   }
-  
+
  private:
   FirebaseError _error;
 };
-
-#endif // firebase_h
+*/
+#endif // FIREBASE_H_

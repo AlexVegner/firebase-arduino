@@ -24,35 +24,19 @@
 
 namespace {
 const char* kFirebaseFingerprint = "7A 54 06 9B DC 7A 25 B3 86 8D 66 53 48 2C 0B 96 42 C7 B3 0A";
-const uint16_t kFirebasePort = 443;
-
-String makeFirebaseURL(const String& path, const String& auth) {
-  String url;
-  if (path[0] != '/') {
-    url = "/";
-  }
-  url += path + ".json";
-  if (auth.length() > 0) {
-    url += "?auth=" + auth;
-  }
-  return url;
-}
+const int kFirebasePort = 443;
 
 }  // namespace
 
-Firebase::Firebase(const String& host) : host_(host) {
-  http_.setReuse(true);
+Firebase::Firebase(const char* host, const char* auth) : host_(host), auth_(auth) {
+  //http_.setReuse(true);
 }
 
-Firebase& Firebase::auth(const String& auth) {
-  auth_ = auth;
-  return *this;
+FirebaseGet Firebase::get(const char* path) {
+  return FirebaseGet(host_, auth_, path);
 }
 
-FirebaseGet Firebase::get(const String& path) {
-  return FirebaseGet(host_, auth_, path, &http_);
-}
-
+/*
 FirebaseSet Firebase::set(const String& path, const String& value) {
   return FirebaseSet(host_, auth_, path, value, &http_);
 }
@@ -117,18 +101,18 @@ FirebaseCall::FirebaseCall(const String& host, const String& auth,
     response_ = http_->getString();
   }
 }
-
+*/
 // FirebaseGet
-FirebaseGet::FirebaseGet(const String& host, const String& auth,
-                         const String& path,
-                         HTTPClient* http)
-  : FirebaseCall(host, auth, "GET", path, "", http) {
-  if (!error()) {
-    // TODO: parse json
-    json_ = response();
-  }
+FirebaseGet::FirebaseGet(const char* host, const char* auth,
+                         const char* path) {
+  url_ = host;
+  url_ += path;
+  url_ += ".json";
+  url_ += "?auth=";
+  url_ += auth;
 }
 
+/*
 // FirebaseSet
 FirebaseSet::FirebaseSet(const String& host, const String& auth,
        const String& path, const String& value,
@@ -183,3 +167,4 @@ FirebaseStream::Event FirebaseStream::read(String& event) {
   client->readStringUntil('\n'); // consume separator
   return type;
 }
+*/
