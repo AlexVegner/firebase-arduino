@@ -23,6 +23,7 @@
 #include "Firebase.h"
 #include <curl/curl.h>
 #include <string>
+#include <cassert>
 
 size_t WriteFunction(void* contents, size_t size, size_t nmemb, void* userp) {
   static_cast<std::string*>(userp)->append(static_cast<const char*>(contents),
@@ -32,26 +33,36 @@ size_t WriteFunction(void* contents, size_t size, size_t nmemb, void* userp) {
 
 class FirebaseCurlTransport {
  public:
-  int write(const FirebaseGet& get) {
-    CURL *curl = curl_easy_init();
-    if(curl) {
-      CURLcode res;
-      curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-      curl_easy_setopt(curl, CURLOPT_URL, get.URL());
-      curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-
-      //FirebaseResult result;
-      //curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &WriteFunction);
-      //curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result.body_);
-
-      res = curl_easy_perform(curl);
-      curl_easy_cleanup(curl);
-      return 0;
+  FirebaseCurlTransport() {
+    curl_ = curl_easy_init();
+    assert(curl_);
+  }
+  ~FirebaseCurlTransport() {
+    curl_easy_cleanup(curl_);
+  }
+  template<int method, size_t HOST_SIZE, size_t AUTH_SIZE, size_t PATH_SIZE>
+  int write(
+      const FirebaseRequest<method, HOST_SIZE, AUTH_SIZE, PATH_SIZE>& req) {
+    switch(method) {
+      case GET:
+        curl_easy_setopt(curl_, CURLOPT_HTTPGET, 1L);
+        break;
+      default:
+        assert(false && "unsupported method");
+        break;
     }
-    return -1;
+    curl_easy_setopt(curl_, CURLOPT_URL, req.url);
+    curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteFunction);
+    curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &buf_);
+    CURLcode res = curl_easy_perform(curl_);
+    return res;
   }
-  int read(const std::string& out) {
+  int read(std::string* out) {
+    *out = buf_;
   }
+ private:
+  CURL *curl_;
+  std::string buf_;
 };
 
 #endif // FIREBASE_CURL_H_

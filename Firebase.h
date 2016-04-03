@@ -20,160 +20,94 @@
 #ifndef FIREBASE_H_
 #define FIREBASE_H_
 
-//#include <Arduino.h>
-//#include <ESP8266WiFi.h>
-//#include <WiFiClientSecure.h>
-//#include <ESP8266HTTPClient.h>
+#ifndef FIREBASE_URL_SIZE
+#define FIREBASE_URL_SIZE 512
+#endif // FIREBASE_URL_SIZE
 
-class FirebaseGet;
-class FirebaseSet;
-class FirebasePush;
-class FirebaseRemove;
-class FirebaseStream;
+#include <cstring>
 
-// Firebase REST API client.
-class Firebase {
- public:
-  Firebase(const char* host, const char* auth);
-  //Firebase& auth();
+namespace {
+const char kFirebaseScheme[] = "https://";
+const char kFirebaseFingerprint[] = "7A 54 06 9B DC 7A 25 B3 86 8D 66 53 48 2C 0B 96 42 C7 B3 0A";
+const char kFirebasePort[] = ":443";
+const char kFirebaseExt[] = ".json";
+const char kFirebaseAuthQuery[] = "?auth=";
+template<size_t SRC_SIZE>
+void cat(char*& dst, const char (&src)[SRC_SIZE]){
+  memcpy(dst, src, sizeof(src));
+  dst+=sizeof(src)-1;
+}
+}  // namespace
 
-  // Fetch json encoded `value` at `path`.
-  FirebaseGet get(const char* path);
-  /*
-  // Set json encoded `value` at `path`.
-  FirebaseSet set(const String& path, const String& json);
-
-  // Add new json encoded `value` to list at `path`.
-  FirebasePush push(const String& path, const String& json);
-
-  // Delete value at `path`.
-  FirebaseRemove remove(const String& path);
-
-  // Start a stream of events that affect value at `path`.
-  FirebaseStream stream(const String& path);
-  */
- private:
-  //HTTPClient http_;
-  const char* host_;
-  const char* auth_;
+enum HttpMethod {
+  GET,
+};
+template<int method, size_t HOST_SIZE, size_t AUTH_SIZE, size_t PATH_SIZE>
+struct FirebaseRequest {
+  FirebaseRequest(const char (&host)[HOST_SIZE],
+                  const char (&auth)[AUTH_SIZE],
+                  const char (&path)[PATH_SIZE],
+                  const char* data) {
+    char* p = url;
+    cat(p, kFirebaseScheme);
+    cat(p, host);
+    cat(p, kFirebasePort);
+    cat(p, path);
+    cat(p, kFirebaseExt);
+    cat(p, kFirebaseAuthQuery);
+    cat(p, auth);
+  }
+  const char* data;
+  char url[sizeof(kFirebaseScheme)-1+
+           HOST_SIZE-1+
+           sizeof(kFirebasePort)-1+
+           PATH_SIZE-1+
+           sizeof(kFirebaseExt)-1+
+           sizeof(kFirebaseAuthQuery)-1+
+           AUTH_SIZE];
 };
 
-/*
-class FirebaseError {
- public:
-  FirebaseError() {}
-  FirebaseError(int code, const String& message) : code_(code), message_(message) {
-  }
-  operator bool() const { return code_ != 0; }
-  int code() const { return code_; }
-  const String& message() const { return message_; }
- private:
-  int code_ = 0;
-  String message_ = "";
-};*/
-
-/*
-class FirebaseCall {
- public:
-  FirebaseCall() {}
-  FirebaseCall(const char* host, const char* auth,
-               const char* method, const char* path,
-               const char* data = NULL);
-  const FirebaseError& error() const {
-    return error_;
-  }
-  const String& response() {
-    return response_;
-  }
-//protected:
-  //HTTPClient* http_;
-  //FirebaseError error_;
-  //String response_;
-//};
-*/
-#include <string>
-class FirebaseGet/* : public FirebaseCall*/ {
- public:
-  FirebaseGet() {}
-  FirebaseGet(const char* host, const char* auth,
-              const char* path);
-  const char *URL() const {
-    return url_.c_str();
-  }
- private:
-  std::string url_;
-  /*
-  const String& json() const {
-    return json_;
-  }
-
- private:
-  String json_;
-  */
+template<size_t HOST_SIZE, size_t AUTH_SIZE, size_t PATH_SIZE>
+struct FirebaseGetRequest
+    : FirebaseRequest<GET, HOST_SIZE, AUTH_SIZE, PATH_SIZE> {
+  FirebaseGetRequest(const char (&host)[HOST_SIZE],
+              const char (&auth)[AUTH_SIZE],
+              const char (&path)[PATH_SIZE])
+      : FirebaseRequest<GET, HOST_SIZE, AUTH_SIZE, PATH_SIZE>{host, auth, path, nullptr} {}
 };
 
-/*
-class FirebaseSet: public FirebaseCall {
- public:
-  FirebaseSet() {}
-  FirebaseSet(const String& host, const String& auth,
-	      const String& path, const String& value, HTTPClient* http = NULL);
+template<size_t HOST_SIZE, size_t AUTH_SIZE, size_t PATH_SIZE>
+FirebaseGetRequest<HOST_SIZE, AUTH_SIZE, PATH_SIZE> FirebaseGet(
+    const char (&host)[HOST_SIZE],
+    const char (&auth)[AUTH_SIZE],
+    const char (&path)[PATH_SIZE]) {
+  return FirebaseGetRequest<HOST_SIZE, AUTH_SIZE, PATH_SIZE>(
+      host, auth, path);
+}
 
-  const String& json() const {
-    return json_;
+
+template<size_t HOST_SIZE, size_t AUTH_SIZE>
+struct FirebaseHost {
+  FirebaseHost(const char (&host_)[HOST_SIZE],
+           const char (&auth_)[AUTH_SIZE])
+      : host(host_), auth(auth_) {}
+  template<size_t PATH_SIZE>
+  FirebaseGetRequest<HOST_SIZE, AUTH_SIZE, PATH_SIZE>
+  get(const char (&path)[PATH_SIZE]) {
+    return FirebaseGetRequest<HOST_SIZE, AUTH_SIZE, PATH_SIZE>{
+      host, auth, path
+    };
   }
-
- private:
-  String json_;
+  const char (&host)[HOST_SIZE];
+  const char (&auth)[AUTH_SIZE];
 };
 
-class FirebasePush : public FirebaseCall {
- public:
-  FirebasePush() {}
-  FirebasePush(const String& host, const String& auth,
-               const String& path, const String& value, HTTPClient* http = NULL);
+template<size_t HOST_SIZE, size_t AUTH_SIZE>
+FirebaseHost<HOST_SIZE, AUTH_SIZE> Firebase(
+    const char (&host)[HOST_SIZE],
+    const char (&auth)[AUTH_SIZE]) {
+  return FirebaseHost<HOST_SIZE, AUTH_SIZE>(
+      host, auth);
+}
 
-  const String& name() const {
-    return name_;
-  }
-
- private:
-  String name_;
-};
-
-class FirebaseRemove : public FirebaseCall {
- public:
-  FirebaseRemove() {}
-  FirebaseRemove(const String& host, const String& auth,
-                 const String& path, HTTPClient* http = NULL);
-};
-
-
-class FirebaseStream : public FirebaseCall {
- public:
-  FirebaseStream() {}
-  FirebaseStream(const String& host, const String& auth,
-                 const String& path, HTTPClient* http = NULL);
-
-  // Return if there is any event available to read.
-  bool available();
-
-  // Event type.
-  enum Event {
-    UNKNOWN,
-    PUT,
-    PATCH
-  };
-
-  // Read next json encoded `event` from stream.
-  Event read(String& event);
-
-  const FirebaseError& error() const {
-    return _error;
-  }
-
- private:
-  FirebaseError _error;
-};
-*/
 #endif // FIREBASE_H_
