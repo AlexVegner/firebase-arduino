@@ -17,10 +17,16 @@
 #ifndef FIREBASE_CURL_H_
 #define FIREBASE_CURL_H_
 
-#include <curl/curl.h>
 #include <string>
 #include <cassert>
 #include <cstring>
+#include <iostream>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 namespace {
 const char kFirebaseScheme[] = "https://";
@@ -114,40 +120,55 @@ class Firebase {
   const char* const auth;
 };
 
-class FirebaseCurlTransport {
+class FirebaseOpenSSLTransport {
  public:
-  FirebaseCurlTransport() {
-    curl_ = curl_easy_init();
-    assert(curl_);
+  FirebaseOpenSSLTransport() {
   }
-  ~FirebaseCurlTransport() {
-    curl_easy_cleanup(curl_);
+  ~FirebaseOpenSSLTransport() {
   }
-
+  int begin(const Firebase& firebase) {
+    return connect(firebase.host);
+  }
   int write(const FirebaseGet& req) {
-    curl_easy_setopt(curl_, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl_, CURLOPT_URL, req.url());
-    curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteFunction);
-    curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &buf_);
-    return curl_easy_perform(curl_);
+    assert(sock_ != 0);
+    write("GET /foo.json?auth=KqfUj6MGR1SLjeudfgWdPskmukiW1Fw7d0LT4S3u HTTP/1.1\r\n");
+    write("Host: proppy-iot-button.firebaseio.com\r\n");
+    write("User-Agent: firebase-iot\r\n");
+    write("Connection: Close\r\n\r\n");
   }
   int write(const FirebasePost& req) {
-    curl_easy_setopt(curl_, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl_, CURLOPT_URL, req.url());
-    curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteFunction);
-    curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &buf_);
-    return 0;
+    assert(sock_ != 0);
   }
-  int write(const std::string& body) {
-    curl_easy_setopt(curl_, CURLOPT_POSTFIELDS, body.c_str());
-    return curl_easy_perform(curl_);
+  int write(const std::string& data) {
+    assert(sock_ != 0);
+    int n = send(sock_, data.c_str(), data.length(), 0);
+    assert(n == data.length());
+    std::cout << n << std::endl;
   }
   int read(std::string* out) {
-    *out = buf_;
+    assert(sock_ != 0);
+    char buf[256];
+    memset(buf, 0, 256);
+    int n = recv(sock_, buf, sizeof(buf), 0);
+    std::cout << buf << std::endl;
+    out->append(buf, n);
   }
  private:
-  CURL *curl_;
-  std::string buf_;
+  int connect(const char* host) {
+    addrinfo *result;
+    addrinfo hints;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    int getaddrinfo_err =  getaddrinfo(host, "443", NULL, &result);
+    assert(getaddrinfo_err == 0);
+    sock_ = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    assert(sock_ != -1);
+    int connect_err = ::connect(sock_, result->ai_addr, result->ai_addrlen);
+    assert(connect_err == 0);
+    freeaddrinfo(result);
+  }
+  int sock_;
 };
 
 #endif // FIREBASE_CURL_H_
