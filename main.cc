@@ -19,8 +19,8 @@ int main() {
   transport.read(&result);
   std::cout << result << std::endl;
 
-  //transport.write(postFoo);
-  //transport.write("{\"some\":\"data\"}");
-  //transport.read(&result);
-  //std::cout << result << std::endl;
+  transport.write(postFoo);
+  transport.write("{\"some\":\"data\"}");
+  transport.read(&result);
+  std::cout << result << std::endl;
 }

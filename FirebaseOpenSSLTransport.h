@@ -33,6 +33,7 @@ const char kFirebaseAuthQuery[] = "?auth=";
 const char kFirebaseGET[] = "GET";
 const char kFirebasePOST[] = "POST";
 const char kFirebaseHostHeader[] = "Host: ";
+const char kFirebaseContentLengthHeader[] = "Content-Length: ";
 const char kFirebaseHTTPVersion[] = "HTTP/1.1";
 }
 
@@ -133,13 +134,20 @@ class FirebaseOpenSSLTransport {
     int handshake_err = BIO_do_handshake(bio_);
     assert(handshake_err > 0);
   }
-  int write(const FirebaseRequest& req) {
-    int n = BIO_write(bio_, req.raw(), req.size());
-    assert(n == req.size());
+  int write(const FirebaseGet& req) {
+    int n = writeRequest(req);
     n += BIO_puts(bio_, "\r\n");
     return n;
   }
+  int write(const FirebasePost& req) {
+    int n = writeRequest(req);
+    return n;
+  }
   int write(const std::string& data) {
+    std::string header(kFirebaseContentLengthHeader);
+    header += std::to_string(data.length());
+    header += "\r\n\r\n";
+    BIO_puts(bio_, header.c_str());
     return BIO_puts(bio_, data.c_str());
   }
   int read(std::string* out) {
@@ -158,6 +166,11 @@ class FirebaseOpenSSLTransport {
     }
   }
  private:
+  int writeRequest(const FirebaseRequest& req) {
+    int n = BIO_write(bio_, req.raw(), req.size());
+    assert(n == req.size());
+    return n;
+  }
   SSL_CTX* ctx_{nullptr};
   SSL* ssl_{nullptr};
   BIO* bio_{nullptr};
