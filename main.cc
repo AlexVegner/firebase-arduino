@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-Firebase firebase("proppy-iot-button.firebaseio.com", "KqfUj6MGR1SLjeudfgWdPskmukiW1Fw7d0LT4S3u");
+Firebase firebase("proppy-iot-button.firebaseio.com");
 FirebaseOpenSSLTransport transport;
 FirebasePost postFoo = firebase.post("/foo");
 
@@ -14,8 +14,13 @@ int main() {
   transport.read(&result);
   std::cout << result << std::endl;
 
-  //sock.write(firebase.post("/foo"));
-  //sock.write("{\"some\":\"data\"}");
-  //std::string result;
-  //sock.read(&result);
+  err = transport.write(firebase.get("/state"));
+  std::cout << err << std::endl;
+  transport.read(&result);
+  std::cout << result << std::endl;
+
+  //transport.write(postFoo);
+  //transport.write("{\"some\":\"data\"}");
+  //transport.read(&result);
+  //std::cout << result << std::endl;
 }

@@ -30,28 +30,59 @@ const char kFirebaseScheme[] = "https://";
 const char kFirebasePort[] = ":443";
 const char kFirebaseExt[] = ".json";
 const char kFirebaseAuthQuery[] = "?auth=";
+const char kFirebaseGET[] = "GET";
+const char kFirebasePOST[] = "POST";
+const char kFirebaseHostHeader[] = "Host: ";
+const char kFirebaseHTTPVersion[] = "HTTP/1.1";
 }
 
-class FirebaseGet {
+class FirebaseRequest {
  public:
-  FirebaseGet(const char* host, const char* auth, const char* path) : host(host), auth(auth), path(path) {
+  FirebaseRequest(const char* method, const char* host, const char* auth, const char* path) : host{host} {
+    raw_ += method;
+    raw_ += " ";
+    raw_ += path;
+    raw_ += kFirebaseExt;
+    if (strlen(auth) > 0) {
+      raw_ += kFirebaseAuthQuery;
+      raw_ += auth;
+    }
+    raw_ += " ";
+    raw_ += kFirebaseHTTPVersion;
+    raw_ += "\r\n";
+    raw_ += kFirebaseHostHeader;
+    raw_ += host;
+    raw_ += "\r\n";
+  }
+  ~FirebaseRequest() {
+  }
+  const char* raw() const {
+    return raw_.c_str();
+  }
+  size_t size() const {
+    return raw_.length();
+  }
+  const char* host;
+ private:
+  std::string raw_;
+};
+
+class FirebaseGet : public FirebaseRequest {
+ public:
+  FirebaseGet(const char* host, const char* auth, const char* path)
+      : FirebaseRequest(kFirebaseGET, host, auth, path) {
   }
   ~FirebaseGet() {
   }
-  const char* const host;
-  const char* const auth;
-  const char* const path;
 };
 
-class FirebasePost {
+class FirebasePost : public FirebaseRequest {
  public:
-  FirebasePost(const char* host, const char* auth, const char* path) : host(host), auth(auth), path(path) {
+  FirebasePost(const char* host, const char* auth, const char* path)
+      : FirebaseRequest(kFirebasePOST, host, auth, path) {
   }
   ~FirebasePost() {
   }
-  const char* const host;
-  const char* const auth;
-  const char* const path;
 };
 
 class Firebase {
@@ -82,45 +113,45 @@ class FirebaseOpenSSLTransport {
     settings_.on_body = [](http_parser* p, const char* at, size_t length)->int{
       auto s = reinterpret_cast<std::string*>(p->data);
       std::cout << "body:" << std::string(at, length) << std::endl;
-      s->assign(at, length);
+      s->append(at, length);
     };
-
-    http_parser_init(&parser_, HTTP_RESPONSE);
   }
   ~FirebaseOpenSSLTransport() {
     BIO_free_all(bio_);
   }
   int begin(const Firebase& firebase) {
-    BIO_set_conn_hostname(bio_, "proppy-iot-button.firebaseio.com:https");
+    connect(firebase.host);
+  }
+
+  int connect(const char* host) {
+    std::string hostname(host);
+    hostname += ":https";
+    std::cout << hostname << std::endl;
+    BIO_set_conn_hostname(bio_, hostname.c_str());
     int connect_err = BIO_do_connect(bio_);
     assert(connect_err > 0);
     int handshake_err = BIO_do_handshake(bio_);
     assert(handshake_err > 0);
-    connected_ = true;
   }
-  int write(const FirebaseGet& req) {
-    assert(connected_);
-    int n = BIO_puts(bio_, "GET /foo.json HTTP/1.1\r\n");
-    n += BIO_puts(bio_, "Host: proppy-iot-button.firebaseio.com\r\n");
-    n += BIO_puts(bio_, "Connect: Close\r\n\r\n");
+  int write(const FirebaseRequest& req) {
+    int n = BIO_write(bio_, req.raw(), req.size());
+    assert(n == req.size());
+    n += BIO_puts(bio_, "\r\n");
     return n;
   }
-  int write(const FirebasePost& req) {
-    assert(connected_);
-  }
   int write(const std::string& data) {
-    assert(connected_);
     return BIO_puts(bio_, data.c_str());
   }
   int read(std::string* out) {
-    assert(connected_);
     char buf[1024];
+    out->clear();
+    http_parser_init(&parser_, HTTP_RESPONSE);
     for (;;) {
       int n = BIO_read(bio_, buf, sizeof(buf));
       parser_.data = out;
       int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
       std::cout << "nread:" << n << ", nparsed:" << nparsed << std::endl;
-      if (!out->empty()) {
+      if (http_body_is_final(&parser_)) {
         return nparsed;
       }
       //out->append(buf, n);
@@ -130,7 +161,6 @@ class FirebaseOpenSSLTransport {
   SSL_CTX* ctx_{nullptr};
   SSL* ssl_{nullptr};
   BIO* bio_{nullptr};
-  bool connected_{false};
   http_parser parser_;
   http_parser_settings settings_;
 };
