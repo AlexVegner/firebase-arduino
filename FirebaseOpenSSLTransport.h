@@ -23,6 +23,7 @@
 #include <iostream>
 
 #include <openssl/ssl.h>
+#include "http-parser/http_parser.h"
 
 namespace {
 const char kFirebaseScheme[] = "https://";
@@ -55,7 +56,7 @@ class FirebasePost {
 
 class Firebase {
  public:
-  Firebase(const char* host, const char* auth) : host(host), auth(auth) {
+  Firebase(const char* host, const char* auth = "") : host(host), auth(auth) {
   }
   FirebaseGet get(const char* path) {
     return FirebaseGet(host, auth, path);
@@ -77,6 +78,14 @@ class FirebaseOpenSSLTransport {
     BIO_get_ssl(bio_, &ssl_);
     assert(ssl_ != nullptr);
     SSL_set_mode(ssl_, SSL_MODE_AUTO_RETRY);
+
+    settings_.on_body = [](http_parser* p, const char* at, size_t length)->int{
+      auto s = reinterpret_cast<std::string*>(p->data);
+      std::cout << "body:" << std::string(at, length) << std::endl;
+      s->assign(at, length);
+    };
+
+    http_parser_init(&parser_, HTTP_RESPONSE);
   }
   ~FirebaseOpenSSLTransport() {
     BIO_free_all(bio_);
@@ -91,7 +100,7 @@ class FirebaseOpenSSLTransport {
   }
   int write(const FirebaseGet& req) {
     assert(connected_);
-    int n = BIO_puts(bio_, "GET /foo.json?auth=KqfUj6MGR1SLjeudfgWdPskmukiW1Fw7d0LT4S3u HTTP/1.1\r\n");
+    int n = BIO_puts(bio_, "GET /foo.json HTTP/1.1\r\n");
     n += BIO_puts(bio_, "Host: proppy-iot-button.firebaseio.com\r\n");
     n += BIO_puts(bio_, "Connect: Close\r\n\r\n");
     return n;
@@ -108,7 +117,12 @@ class FirebaseOpenSSLTransport {
     char buf[1024];
     for (;;) {
       int n = BIO_read(bio_, buf, sizeof(buf));
-      std::cout << buf << std::endl;
+      parser_.data = out;
+      int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
+      std::cout << "nread:" << n << ", nparsed:" << nparsed << std::endl;
+      if (!out->empty()) {
+        return nparsed;
+      }
       //out->append(buf, n);
     }
   }
@@ -117,6 +131,8 @@ class FirebaseOpenSSLTransport {
   SSL* ssl_{nullptr};
   BIO* bio_{nullptr};
   bool connected_{false};
+  http_parser parser_;
+  http_parser_settings settings_;
 };
 
 #endif // FIREBASE_OPENSSL_TRANSPORT_H_
