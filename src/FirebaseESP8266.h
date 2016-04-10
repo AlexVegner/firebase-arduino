@@ -13,11 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "Firebase.h"
-#include <cstdio>
-int main() {
 
-  auto firebase = Firebase("example.firebaseio.com", "someauth");
-  auto fget = firebase.get("/somepath");
-  printf("%s\n", fget.url);
-}
+// firebase-arduino is an Arduino client for Firebase.
+#include "esp8266/FirebaseESP8266Transport.h"
+#include <ESP8266WiFi.h>

@@ -17,11 +17,12 @@
 // FirebasePush_ESP8266 is a sample that push a new timestamp to firebase
 // on each reset.
 
-#include <Firebase.h>
+#include <FirebaseESP8266Transport.h>
 
 // create firebase client.
-Firebase fbase = Firebase("example.firebaseio.com")
-                   .auth("secret_or_token");
+Firebase firebase = Firebase("example.firebaseio.com", "secret_or_token");
+// create transport
+FirebaseESP8266Transport transport;
 
 void setup() {
   Serial.begin(9600);
@@ -37,26 +38,25 @@ void setup() {
   Serial.print("connected: ");
   Serial.println(WiFi.localIP());
 
-   // add a new entry.
-  FirebasePush push = fbase.push("/logs", "{\".sv\": \"timestamp\"}");
-  if (push.error()) {
+  // connect to firebase
+  transport.begin(firebase);
+  
+  // add a new entry.
+  transport.write(firebase.push("/logs"));
+  int n = transport.write("{\".sv\": \"timestamp\"}");
+  if (n < 0) {
       Serial.println("Firebase push failed");
-      Serial.println(push.error().message());  
       return;
   }
-
-  // print key.
-  Serial.println(push.name());
+  Serial.println(transport.readString());
 
   // get all entries.
-  FirebaseGet get = fbase.get("/logs");
-  if (get.error()) {
+  int n = transport.write(fbase.get("/logs"));
+  if (n < 0) {
       Serial.println("Firebase get failed");
-      Serial.println(push.error().message());  
       return;
   }
-  // print json.
-  Serial.println(get.json());
+  Serial.println(transport.readString());
 }
 
 void loop() {

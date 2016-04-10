@@ -1,25 +1,27 @@
 #include "FirebaseOpenSSLTransport.h"
 
 #include <iostream>
+#include <cassert>
 
 Firebase firebase("proppy-iot-button.firebaseio.com");
 FirebaseOpenSSLTransport transport;
-FirebasePost postFoo = firebase.post("/foo");
+FirebasePush pushFoo = firebase.push("/foo");
 
 int main() {
   transport.begin(firebase);
-  int err = transport.write(firebase.get("/"));
-  std::cout << err << std::endl;
+  int write_err = transport.write(firebase.get("/"));
+  assert(write_err > 0);
+
   std::string result;
+  int read_err = transport.read(&result);
+  assert(read_err > 0);
+  std::cout << result << std::endl;
+
+  write_err = transport.write(firebase.get("/state"));
   transport.read(&result);
   std::cout << result << std::endl;
 
-  err = transport.write(firebase.get("/state"));
-  std::cout << err << std::endl;
-  transport.read(&result);
-  std::cout << result << std::endl;
-
-  transport.write(postFoo);
+  write_err = transport.write(pushFoo);
   transport.write("{\"some\":\"data\"}");
   transport.read(&result);
   std::cout << result << std::endl;
