@@ -82,13 +82,14 @@ int FirebaseESP8266Transport::write(const String& data) {
   return n+nn;
 }
 
-String FirebaseESP8266Transport::readString() {
+int FirebaseESP8266Transport::read(String* out) {
   int err = handleHeaderResponse();
   if (err < 0) {
     // TODO(proppy): set global error?
-    return "";
+    return ErrRead;
   }
   // TODO(proppy): get read of extra copy
   // use writeToStream()?
-  return getString();
+  *out = getString();
+  return out->length();
 }

@@ -29,22 +29,24 @@ enum {
   ErrParse = -5
 };
 
+// force std::string instanciation
+template class std::basic_string<char>;
+
 class FirebaseRequest {
  public:
   FirebaseRequest(const char* method, const char* host, const char* auth, const char* path);
   ~FirebaseRequest();
   const char* raw() const {
-    return raw_;
+    return raw_.c_str();
   }
   size_t size() const {
-    return size_;
+    return raw_.length();
   }
   const char* const host;
  private:
   // TODO(proppy): add segmented reader method
   // instead or full copy.
-  char* raw_;
-  int size_;
+  std::string raw_;
 };
 
 class FirebaseGet : public FirebaseRequest {

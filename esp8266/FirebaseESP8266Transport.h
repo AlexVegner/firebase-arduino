@@ -28,7 +28,7 @@ class FirebaseESP8266Transport : HTTPClient {
   int write(const FirebaseGet& get);
   int write(const FirebasePush& push);
   int write(const String& data);
-  String readString();
+  int read(String *result);
  private:
   int writeHeaders(const FirebaseRequest& req);
   HTTPClient http_;

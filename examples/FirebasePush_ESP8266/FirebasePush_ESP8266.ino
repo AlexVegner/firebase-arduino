@@ -48,7 +48,9 @@ void setup() {
       Serial.println("Firebase push failed");
       return;
   }
-  Serial.println(transport.readString());
+  String result;
+  transport.read(&result);
+  Serial.println(result);
 
   // get all entries.
   n = transport.write(firebase.get("/logs"));
@@ -56,7 +58,8 @@ void setup() {
       Serial.println("Firebase get failed");
       return;
   }
-  Serial.println(transport.readString());
+  transport.read(&result);
+  Serial.println(result);
 }
 
 void loop() {

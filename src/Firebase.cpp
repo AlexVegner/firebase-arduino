@@ -15,6 +15,7 @@
 //
 
 #include "Firebase.h"
+
 #include <cstring>
 
 namespace {
@@ -29,44 +30,26 @@ const char kHTTPVersion[] = "HTTP/1.1";
 const char kSpace[] = " ";
 const char kEndLine[] = "\r\n";
 const char kEndHeader[] = "\r\n";
-char* cat(char *out, const char* head, size_t nhead) {
-  memcpy(out, head, nhead);
-  return out+nhead;
-}
-template<typename... Ts>
-char* cat(char* out, const char* head, size_t nhead, Ts... tail) {
-  cat(cat(out, head, nhead), tail...);
-}
-template<size_t N>
-constexpr size_t n(const char (&s)[N]) {
-  return N-1;
-}
 }  // namespace
 
 FirebaseRequest::FirebaseRequest(const char* method, const char* host, const char* auth, const char* path) : host{host} {
-  size_t nmethod = std::strlen(method); // TODO(proppy): use const value.
-  size_t nhost = std::strlen(host);
-  size_t nauth = std::strlen(auth);
-  size_t npath = std::strlen(path);
-  size_t nraw = nmethod + n(kSpace) + npath + n(kExtJSON);
-  if (nauth) {
-    nraw += n(kAuthQuery)+nauth;
+  raw_ += method;
+  raw_ += " ";
+  raw_ += path;
+  raw_ += kExtJSON;
+  if (strlen(auth)) {
+    raw_ += kAuthQuery;
+    raw_ += auth;
   }
-  nraw += n(kSpace) + n(kHTTPVersion) + n(kEndLine) + n(kHostHeader) + nhost + n(kEndHeader);
-  raw_ = new char[nraw+1];
-  size_ = nraw;
-  char* p = cat(raw_, method, nmethod, kSpace, n(kSpace), path, npath, kExtJSON, n(kExtJSON));
-  if (nauth) {
-    p = cat(p, kAuthQuery, n(kAuthQuery), auth, nauth);
-  }
-  p = cat(p,
-      kSpace, n(kSpace), kHTTPVersion, n(kHTTPVersion), kEndLine, n(kEndLine),
-      kHostHeader, n(kHostHeader), host, nhost, kEndHeader, n(kEndHeader));
-  *p = '\0';
+  raw_ += " ";
+  raw_ += kHTTPVersion;
+  raw_ += kEndLine;
+  raw_ += kHostHeader;
+  raw_ += host;
+  raw_ += kEndHeader;
 }
 
 FirebaseRequest::~FirebaseRequest() {
-  delete[] raw_;
 }
 
 FirebaseGet::FirebaseGet(const char* host, const char* auth, const char* path)
