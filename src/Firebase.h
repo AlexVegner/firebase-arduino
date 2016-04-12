@@ -43,7 +43,7 @@ class FirebaseRequest {
     return raw_.length();
   }
   const char* const host;
- private:
+ protected:
   // TODO(proppy): add segmented reader method
   // instead or full copy.
   std::string raw_;
@@ -59,11 +59,17 @@ class FirebasePush : public FirebaseRequest {
   FirebasePush(const char* host, const char* auth, const char* path);
 };
 
+class FirebaseStream : public FirebaseRequest {
+ public:
+  FirebaseStream(const char* host, const char* auth, const char* path);
+};
+
 class Firebase {
  public:
   Firebase(const char* host, const char* auth = "");
   FirebaseGet get(const char* path);
   FirebasePush push(const char* path);
+  FirebaseStream stream(const char* path);
   const char* const host;
   const char* const auth;
 };

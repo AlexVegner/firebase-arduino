@@ -17,9 +17,13 @@
 #include "FirebaseOpenSSLTransport.h"
 
 #include <cassert>
+#include <unistd.h>
 
 namespace {
+const char kHTTPVersion[] = "HTTP/1.1";
+const char kHostHeader[] = "Host: ";
 const char kContentLengthHeader[] = "Content-Length: ";
+const char kConnectionKeepAliveHeader[] = "Connection: keep-alive\r\n";
 const size_t kReadBufferSize = 1024;
 }  // namespace
 
@@ -46,20 +50,20 @@ int FirebaseOpenSSLTransport::connect(const char* host) {
   hostname += ":https";
   BIO_set_conn_hostname(bio_, hostname.c_str());
   int connect_err = BIO_do_connect(bio_);
-  if (connect_err <= 0) {
-    return ErrConnect;
-  }
+  assert(connect_err > 0);
   int handshake_err = BIO_do_handshake(bio_);
-  if (handshake_err <= 0) {
-    return ErrHandshake;
-  }
+  assert(handshake_err > 0);
+  return 1;
 }
 
 int FirebaseOpenSSLTransport::write(const FirebaseGet& get) {
   int n = writeHeaders(get);
-  if (n <= 0) {
+  if (n < 0) {
     return n;
   }
+
+  // TODO(proppy): add end-header to FirebaseRequest::raw to prevent
+  // short-write
   int nn = BIO_puts(bio_, "\r\n"); // no body
   if (nn <= 0) {
     return ErrWrite;
@@ -71,8 +75,83 @@ int FirebaseOpenSSLTransport::write(const FirebasePush& push) {
   return writeHeaders(push); // next write is body
 }
 
+int FirebaseOpenSSLTransport::write(const FirebaseStream& stream) {
+  int n = writeHeaders(stream);
+  if (n < 0) {
+    return n;
+  }
+  // TODO(proppy): add end-header to FirebaseRequest::raw to prevent
+  // short-write
+  int nn = BIO_puts(bio_, "\r\n"); // no body
+  if (nn <= 0) {
+    return ErrWrite;
+  }
+  // handle redirect
+  char buf[kReadBufferSize];
+  http_parser_init(&parser_, HTTP_RESPONSE);
+  http_parser_settings_init(&settings_);
+  std::string redirect;
+  parser_.data = &redirect;
+  settings_.on_header_field = [](http_parser* p, const char* at, size_t length)->int{
+    printf("header_field %s\n", std::string{at, length}.c_str());
+    std::string header{at, length};
+    if (p->status_code == 307 && header == "Location") {
+      reinterpret_cast<std::string*>(p->data)->assign(at, length);
+    }
+    return 0;
+  };
+  settings_.on_header_value = [](http_parser* p, const char* at, size_t length)->int{
+    printf("header_value %s\n", std::string{at, length}.c_str());
+    auto s = reinterpret_cast<std::string*>(p->data);
+    if ((p->status_code == 307) && (*s == "Location")) {
+      s->assign(at, length);
+    }
+    return 0;
+  };
+  settings_.on_headers_complete = [](http_parser* p)->int{
+    return 1; // no body
+  };
+  for (;;) {
+    int n = BIO_read(bio_, buf, sizeof(buf));
+    if (n <= 0) {
+      return ErrRead;
+    }
+    printf("read: %s\n", buf);
+    int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
+    printf("parsed: %d/%d\n", nparsed, n);
+    if (nparsed <= 0) {
+      return ErrParse;
+    }
+    if (redirect.empty()) {
+      streaming_ = true;
+      return n;
+    }
+    std::string host = redirect.substr(8, redirect.find_last_of("/")-8);
+    std::string path = redirect.substr(redirect.find_last_of("/"));
+    redirect = "";
+    printf("host: %s, path %s\n", host.c_str(), path.c_str());
+    int flush_err = BIO_flush(bio_);
+    assert(flush_err >= 0);
+    int reset_err = BIO_reset(bio_);
+    assert(reset_err >= 0);
+    int connect_err = connect(host.c_str());
+    assert(connect_err > 0);
+    std::string req = "GET " + path + " " + kHTTPVersion + "\r\n";
+    req += kHostHeader + host + "\r\n";
+    req += kConnectionKeepAliveHeader;
+    req += "\r\n";
+    printf("req: %s\n", req.c_str());
+    int nn = BIO_puts(bio_, req.c_str());
+    printf("puts: %d\n", nn);
+    if (nn <= 0) {
+      return ErrWrite;
+    }
+  }
+}
+
 int FirebaseOpenSSLTransport::writeHeaders(const FirebaseRequest& req) {
   // TODO(proppy): drain response body
+  streaming_ = false;
   const char* raw = req.raw();
   size_t size = req.size();
   for (int i = 0; i < size;) {
@@ -104,17 +183,25 @@ int FirebaseOpenSSLTransport::read(std::string* out) {
   char buf[kReadBufferSize];
   out->clear();
   http_parser_init(&parser_, HTTP_RESPONSE);
+  http_parser_settings_init(&settings_);
   settings_.on_body = [](http_parser* p, const char* at, size_t length)->int{
     auto s = reinterpret_cast<std::string*>(p->data);
     s->append(at, length);
+    return 0;
   };
   for (;;) {
     int n = BIO_read(bio_, buf, sizeof(buf));
     if (n <= 0) {
       return ErrRead;
     }
+    printf("read: %d:%s\n", n, buf);
+    if (streaming_) {
+      out->assign(buf, n);
+      return n;
+    }
     parser_.data = out;
     int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
+    printf("parsed: %d:%d\n", nparsed, n);
     if (nparsed <= 0) {
       return ErrParse;
     }

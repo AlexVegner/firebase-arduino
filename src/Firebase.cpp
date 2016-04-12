@@ -26,6 +26,7 @@ const char kAuthQuery[] = "?auth=";
 const char kGET[] = "GET";
 const char kPOST[] = "POST";
 const char kHostHeader[] = "Host: ";
+const char kAcceptStreamHeader[] = "Accept: text/event-stream\r\n";
 const char kHTTPVersion[] = "HTTP/1.1";
 const char kSpace[] = " ";
 const char kEndLine[] = "\r\n";
@@ -60,6 +61,11 @@ FirebasePush::FirebasePush(const char* host, const char* auth, const char* path)
     : FirebaseRequest(kPOST, host, auth, path) {
 }
 
+FirebaseStream::FirebaseStream(const char* host, const char* auth, const char* path)
+    : FirebaseRequest(kGET, host, auth, path) {
+  raw_ += kAcceptStreamHeader;
+}
+
 Firebase::Firebase(const char* host, const char* auth) : host(host), auth(auth) {
 }
 
@@ -69,4 +75,8 @@ FirebaseGet Firebase::get(const char* path) {
 
 FirebasePush Firebase::push(const char* path) {
   return FirebasePush(host, auth, path);
+}
+
+FirebaseStream Firebase::stream(const char* path) {
+  return FirebaseStream(host, auth, path);
 }
