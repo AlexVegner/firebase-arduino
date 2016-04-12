@@ -17,7 +17,7 @@
 // FirebasePush_ESP8266 is a sample that push a new timestamp to firebase
 // on each reset.
 
-#include <FirebaseESP8266Transport.h>
+#include <FirebaseESP8266.h>
 
 // create firebase client.
 Firebase firebase = Firebase("example.firebaseio.com", "secret_or_token");
@@ -51,7 +51,7 @@ void setup() {
   Serial.println(transport.readString());
 
   // get all entries.
-  int n = transport.write(fbase.get("/logs"));
+  n = transport.write(firebase.get("/logs"));
   if (n < 0) {
       Serial.println("Firebase get failed");
       return;
