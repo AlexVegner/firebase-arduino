@@ -194,6 +194,7 @@ int FirebaseOpenSSLTransport::readHeaders() {
 
 int FirebaseOpenSSLTransport::available() {
   if (streaming_) {
+    // TODO(proppy): use select
     char buf[kReadBufferSize];
     BIO_read(bio_, buf, 0);
     return BIO_pending(bio_);
