@@ -35,7 +35,9 @@ class FirebaseOpenSSLTransport {
   int write(const FirebaseStream& stream);
   int write(const std::string& data);
   int read(std::string* out);
+  int available();
  private:
+  int readHeaders();
   int writeHeaders(const FirebaseRequest& req);
   SSL_CTX* ctx_{nullptr};
   SSL* ssl_{nullptr};
@@ -43,6 +45,7 @@ class FirebaseOpenSSLTransport {
   http_parser parser_;
   http_parser_settings settings_;
   bool streaming_;
+  int body_length_left_;
 };
 
 #endif // FIREBASE_OPENSSL_TRANSPORT_H_

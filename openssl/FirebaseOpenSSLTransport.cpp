@@ -35,6 +35,7 @@ FirebaseOpenSSLTransport::FirebaseOpenSSLTransport() {
   BIO_get_ssl(bio_, &ssl_);
   assert(ssl_ != nullptr);
   SSL_set_mode(ssl_, SSL_MODE_AUTO_RETRY);
+  BIO_set_nbio(bio_, 1); // TODO(proppy): switch to non blocking
 }
 
 FirebaseOpenSSLTransport::~FirebaseOpenSSLTransport() {
@@ -49,8 +50,7 @@ int FirebaseOpenSSLTransport::connect(const char* host) {
   std::string hostname(host);
   hostname += ":https";
   BIO_set_conn_hostname(bio_, hostname.c_str());
-  int connect_err = BIO_do_connect(bio_);
-  assert(connect_err > 0);
+  while(BIO_do_connect(bio_) <= 0) {} // TODO(proppy): use select
   int handshake_err = BIO_do_handshake(bio_);
   assert(handshake_err > 0);
   return 1;
@@ -58,38 +58,43 @@ int FirebaseOpenSSLTransport::connect(const char* host) {
 
 int FirebaseOpenSSLTransport::write(const FirebaseGet& get) {
   int n = writeHeaders(get);
-  if (n < 0) {
-    return n;
-  }
-
+  assert(n >= 0);
   // TODO(proppy): add end-header to FirebaseRequest::raw to prevent
   // short-write
   int nn = BIO_puts(bio_, "\r\n"); // no body
-  if (nn <= 0) {
-    return ErrWrite;
-  }
-  return n+nn;
+  assert(nn >= 0);
+  return readHeaders();
 }
 
 int FirebaseOpenSSLTransport::write(const FirebasePush& push) {
   return writeHeaders(push); // next write is body
 }
 
+
+int FirebaseOpenSSLTransport::write(const std::string& data) {
+  std::string header(kContentLengthHeader);
+  header += std::to_string(data.length());
+  header += "\r\n\r\n"; // end request
+  // TODO(proppy): proper write loop
+  int n = BIO_puts(bio_, header.c_str()); // write header
+  assert(n > 0);
+  // TODO(proppy): proper write loop
+  int nn = BIO_puts(bio_, data.c_str()); // write body
+  assert(nn > 0);
+  return readHeaders();
+}
+
 int FirebaseOpenSSLTransport::write(const FirebaseStream& stream) {
   int n = writeHeaders(stream);
-  if (n < 0) {
-    return n;
-  }
+  assert(n > 0);
   // TODO(proppy): add end-header to FirebaseRequest::raw to prevent
   // short-write
   int nn = BIO_puts(bio_, "\r\n"); // no body
-  if (nn <= 0) {
-    return ErrWrite;
-  }
+  assert(n > 0);
   // handle redirect
   char buf[kReadBufferSize];
   http_parser_init(&parser_, HTTP_RESPONSE);
-  http_parser_settings_init(&settings_);
+  //http_parser_settings_init(&settings_);
   std::string redirect;
   parser_.data = &redirect;
   settings_.on_header_field = [](http_parser* p, const char* at, size_t length)->int{
@@ -112,19 +117,16 @@ int FirebaseOpenSSLTransport::write(const FirebaseStream& stream) {
     return 1; // no body
   };
   for (;;) {
-    int n = BIO_read(bio_, buf, sizeof(buf));
-    if (n <= 0) {
-      return ErrRead;
-    }
+    int n;
+    while((n = BIO_read(bio_, buf, sizeof(buf))) <= 0) {}
+    assert(n > 0);
     printf("read: %s\n", buf);
     int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
     printf("parsed: %d/%d\n", nparsed, n);
-    if (nparsed <= 0) {
-      return ErrParse;
-    }
+    assert(nparsed > 0);
     if (redirect.empty()) {
       streaming_ = true;
-      return n;
+      return nparsed;
     }
     std::string host = redirect.substr(8, redirect.find_last_of("/")-8);
     std::string path = redirect.substr(redirect.find_last_of("/"));
@@ -150,7 +152,6 @@ int FirebaseOpenSSLTransport::write(const FirebaseStream& stream) {
 }
 
 int FirebaseOpenSSLTransport::writeHeaders(const FirebaseRequest& req) {
-  // TODO(proppy): drain response body
   streaming_ = false;
   const char* raw = req.raw();
   size_t size = req.size();
@@ -164,49 +165,50 @@ int FirebaseOpenSSLTransport::writeHeaders(const FirebaseRequest& req) {
   return size;
 }
 
-int FirebaseOpenSSLTransport::write(const std::string& data) {
-  std::string header(kContentLengthHeader);
-  header += std::to_string(data.length());
-  header += "\r\n\r\n"; // end request
-  int n = BIO_puts(bio_, header.c_str());
-  if (n <= 0) {
-    return ErrWrite;
+int FirebaseOpenSSLTransport::readHeaders() {
+  char buf[kReadBufferSize];
+  http_parser_init(&parser_, HTTP_RESPONSE);
+  bool header_complete = false;
+  parser_.data = &header_complete;
+  settings_.on_headers_complete = [](http_parser* p)->int{
+    auto b = reinterpret_cast<bool*>(p->data);
+    *b = true;
+    return 1;
+  };
+  for (;;) {
+    int n;
+    while((n = BIO_read(bio_, buf, sizeof(buf))) <= 0) {}
+    printf("read: %d:%s\n", n, buf);
+    int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
+    printf("parsed: %d:%d\n", nparsed, n);
+    assert(nparsed > 0);
+    if (header_complete) {
+      body_length_left_ = parser_.content_length;
+      if (parser_.status_code != 200) {
+        return -parser_.status_code;
+      }
+      return parser_.status_code;
+    }
   }
-  int nn = BIO_puts(bio_, data.c_str()); // write body
-  if (nn <= 0) {
-    return ErrWrite;
+}
+
+int FirebaseOpenSSLTransport::available() {
+  if (streaming_) {
+    char buf[kReadBufferSize];
+    BIO_read(bio_, buf, 0);
+    return BIO_pending(bio_);
   }
-  return n+nn;
+  return body_length_left_;
 }
 
 int FirebaseOpenSSLTransport::read(std::string* out) {
   char buf[kReadBufferSize];
-  out->clear();
-  http_parser_init(&parser_, HTTP_RESPONSE);
-  http_parser_settings_init(&settings_);
-  settings_.on_body = [](http_parser* p, const char* at, size_t length)->int{
-    auto s = reinterpret_cast<std::string*>(p->data);
-    s->append(at, length);
-    return 0;
-  };
-  for (;;) {
-    int n = BIO_read(bio_, buf, sizeof(buf));
-    if (n <= 0) {
-      return ErrRead;
-    }
-    printf("read: %d:%s\n", n, buf);
-    if (streaming_) {
-      out->assign(buf, n);
-      return n;
-    }
-    parser_.data = out;
-    int nparsed = http_parser_execute(&parser_, &settings_, buf, n);
-    printf("parsed: %d:%d\n", nparsed, n);
-    if (nparsed <= 0) {
-      return ErrParse;
-    }
-    if (http_body_is_final(&parser_)) {
-      return nparsed;
-    }
+  int n = BIO_read(bio_, buf, sizeof(buf));
+  assert(n > 0);
+  printf("read: %d:%d\n", n, body_length_left_);
+  if (!streaming_) {
+    body_length_left_ -= n;
   }
+  out->assign(buf, n);
+  return n;
 }
