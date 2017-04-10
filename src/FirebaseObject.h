@@ -34,8 +34,8 @@ class FirebaseObject {
    * Construct from json.
    * \param data JSON formatted string.
    */
-  FirebaseObject(const char* data);
-
+  FirebaseObject(const String& data);
+  
   /**
    * Return the value as a boolean.
    * \param optional path in the JSON object.

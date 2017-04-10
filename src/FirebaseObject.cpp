@@ -18,7 +18,7 @@
 
 // We need to make a copy of data here, even though it may be large.
 // It will need to be long lived.
-FirebaseObject::FirebaseObject(const char* data) : data_{data} {
+FirebaseObject::FirebaseObject(const String& data) : data_{data} {
   json_ = buffer_.parse(&data_[0]);
   // TODO(proppy): find a way to check decoding error, tricky because
   // ArduinoJson doesn't surface error for variant parsing.
